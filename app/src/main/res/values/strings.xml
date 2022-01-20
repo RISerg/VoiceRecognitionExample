@@ -1,0 +1,7 @@
+<resources>
+    <string name="app_name">VoiceRecognitionExample</string>
+    <string name="btn_speak">говорить</string>
+    <string name="btn_clear">очистить</string>
+    <string name="voice_recognizer_not_present">Voice recognizer not present</string>
+    <string name="you_may_speak_now">Говорите, пожалуйста</string>
+</resources>
