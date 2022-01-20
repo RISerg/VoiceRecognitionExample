@@ -4,4 +4,6 @@
     <string name="btn_clear">очистить</string>
     <string name="voice_recognizer_not_present">Voice recognizer not present</string>
     <string name="you_may_speak_now">Говорите, пожалуйста</string>
+    <string name="btnSpeak_listening">Слушаю...</string>
+    <string name="permission_granted">Разрешение выдано</string>
 </resources>

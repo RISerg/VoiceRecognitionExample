@@ -1,18 +1,27 @@
 package com.example.voicerecognitionexample;
 
+import android.Manifest;
+import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.os.Build;
 import android.os.Bundle;
+import android.speech.RecognitionListener;
 import android.speech.RecognizerIntent;
+import android.speech.SpeechRecognizer;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.annotation.NonNull;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import java.util.ArrayList;
+import java.util.Calendar;
 import java.util.List;
 
 import voicerecognitionexample.R;
@@ -20,23 +29,50 @@ import voicerecognitionexample.R;
 public class MainActivity extends AppCompatActivity {
 
     private static final int VOICE_RECOGNITION_REQUEST_CODE = 1001;
-    Button btnSpeak;
-    Button btnClear;
-    TextView tvText;
+    private Button btnSpeak;
+    private TextView tvText;
+    private SpeechRecognizer speechRecognizer;
+    private Intent speechRecognizerIntent;
+    private Boolean listening = false;
+    private MainActivity activity;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-
-        btnSpeak = findViewById(R.id.btn_speak);
-        btnClear = findViewById(R.id.btn_clear_text);
-        tvText = findViewById(R.id.tv_recognised_text);
-
         checkVoiceRecognition();
+
+        activity = this;
+        btnSpeak = findViewById(R.id.btn_speak);
+        tvText = findViewById(R.id.tv_recognised_text);
+        speechRecognizer = SpeechRecognizer.createSpeechRecognizer(this);
+        prepareSpeechRecognizerIntent();
     }
 
-    public void clearTextView(View view) {
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        speechRecognizer.destroy();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == VOICE_RECOGNITION_REQUEST_CODE && grantResults.length > 0) {
+            if (grantResults[0] == PackageManager.PERMISSION_GRANTED)
+                Toast.makeText(this, R.string.permission_granted, Toast.LENGTH_SHORT).show();
+        }
+    }
+
+    public void onBtnSpeakClick(View view) {
+        if (listening) {
+            stopListening();
+        } else {
+            startListening();
+        }
+    }
+
+    public void onBtnClearClick(View view) {
         tvText.setText("");
     }
 
@@ -49,55 +85,128 @@ public class MainActivity extends AppCompatActivity {
             btnSpeak.setText(R.string.voice_recognizer_not_present);
             Toast.makeText(this, R.string.voice_recognizer_not_present, Toast.LENGTH_SHORT).show();
         }
+        // Check permissions
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
+            checkPermission();
+        }
     }
 
-    public void speak(View view) {
-        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
-
-        // Specify the calling package to identify your application
-        intent.putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, getClass().getPackage().getName());
+    public void prepareSpeechRecognizerIntent() {
+        speechRecognizerIntent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
 
         // Display an hint to the user about what he should say.
-        intent.putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.you_may_speak_now));
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_PROMPT, getString(R.string.you_may_speak_now));
 
         // Given an hint to the recognizer about what the user is going to say
         //There are two form of language model available
         //1.LANGUAGE_MODEL_WEB_SEARCH : For short phrases
         //2.LANGUAGE_MODEL_FREE_FORM  : If not sure about the words or phrases and its domain.
-        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        speechRecognizerIntent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
 
-        //Start the Voice recognizer activity for the result.
-        startActivityForResult(intent, VOICE_RECOGNITION_REQUEST_CODE);
-    }
+        speechRecognizer.setRecognitionListener(new RecognitionListener() {
+            @Override
+            public void onReadyForSpeech(Bundle bundle) {
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == VOICE_RECOGNITION_REQUEST_CODE) {
-
-            //If Voice recognition is successful then it returns RESULT_OK
-            if (resultCode == RESULT_OK) {
-                ArrayList<String> textMatchList = data.getStringArrayListExtra(RecognizerIntent.EXTRA_RESULTS);
-                tvText.setText(textMatchList.stream().findFirst().orElse(""));
-                //Result code for various error.
-            } else if (resultCode == RecognizerIntent.RESULT_AUDIO_ERROR) {
-                showToastMessage("Audio Error");
-            } else if (resultCode == RecognizerIntent.RESULT_CLIENT_ERROR) {
-                showToastMessage("Client Error");
-            } else if (resultCode == RecognizerIntent.RESULT_NETWORK_ERROR) {
-                showToastMessage("Network Error");
-            } else if (resultCode == RecognizerIntent.RESULT_NO_MATCH) {
-                showToastMessage("No Match");
-            } else if (resultCode == RecognizerIntent.RESULT_SERVER_ERROR) {
-                showToastMessage("Server Error");
             }
-        }
-        super.onActivityResult(requestCode, resultCode, data);
+
+            @Override
+            public void onBeginningOfSpeech() {
+            }
+
+            @Override
+            public void onRmsChanged(float v) {
+
+            }
+
+            @Override
+            public void onBufferReceived(byte[] bytes) {
+
+            }
+
+            @Override
+            public void onEndOfSpeech() {
+                stopListening();
+            }
+
+            @Override
+            public void onError(int error) {
+                stopListening();
+                String errorText = "Error detected";
+                switch (error) {
+                    case SpeechRecognizer.ERROR_NETWORK_TIMEOUT:
+                        errorText += " network timeout";
+//                        startListening();
+                        break;
+                    case SpeechRecognizer.ERROR_NETWORK:
+                        errorText += " network";
+                        return;
+                    case SpeechRecognizer.ERROR_AUDIO:
+                        errorText += " audio";
+                        break;
+                    case SpeechRecognizer.ERROR_SERVER:
+                        errorText += " server";
+//                        startListening();
+                        break;
+                    case SpeechRecognizer.ERROR_CLIENT:
+                        errorText += " client";
+                        break;
+                    case SpeechRecognizer.ERROR_SPEECH_TIMEOUT:
+                        errorText += " speech time out";
+                        break;
+                    case SpeechRecognizer.ERROR_NO_MATCH:
+                        errorText += " no match";
+//                        startListening();
+                        break;
+                    case SpeechRecognizer.ERROR_RECOGNIZER_BUSY:
+                        errorText += " recogniser busy";
+                        break;
+                    case SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS:
+                        errorText += " insufficient permissions";
+                        break;
+                }
+                Toast.makeText(activity, errorText, Toast.LENGTH_SHORT).show();
+            }
+
+            @Override
+            public void onResults(Bundle bundle) {
+                ArrayList<String> data = bundle.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION);
+                if (!data.isEmpty())
+                    appendText(data.get(0));
+            }
+
+            @Override
+            public void onPartialResults(Bundle bundle) {
+
+            }
+
+            @Override
+            public void onEvent(int i, Bundle bundle) {
+
+            }
+        });
     }
 
-    /**
-     * Helper method to show the toast message
-     **/
-    private void showToastMessage(String message) {
-        Toast.makeText(this, message, Toast.LENGTH_SHORT).show();
+    private void startListening() {
+        btnSpeak.setText(R.string.btnSpeak_listening);
+        speechRecognizer.startListening(speechRecognizerIntent);
+        this.listening = true;
+    }
+
+    private void stopListening() {
+        btnSpeak.setText(R.string.btn_speak);
+        speechRecognizer.stopListening();
+        listening = false;
+    }
+
+    private void checkPermission() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.RECORD_AUDIO}, VOICE_RECOGNITION_REQUEST_CODE);
+        }
+    }
+
+    private void appendText(String text) {
+        @SuppressLint("DefaultLocale")
+        String newText = String.format("%tT > %s\n", Calendar.getInstance(), text);
+        tvText.append(newText);
     }
 }
